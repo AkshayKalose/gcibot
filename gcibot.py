@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2012 Aviral Dasgupta <aviraldg@gmail.com>
 # Copyright (C) 2013-15 Ignacio Rodríguez <ignacio@sugarlabs.org>
-# With contribution of Tymon Radzik <dwgipk@gmail.com> 
+# With contribution of Tymon Radzik <dwgipk@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -79,26 +79,23 @@ class GCIBot(irc.IRCClient):
 
     def parseLink(self, msg, channel, user):
         links = re.findall(
-            ur'https{0,1}://(www\.google-melange\.com|google-melange\.appspot\.com)/gci/task/view/google/gci20([0-9]{2})/([0-9]+)',
+            ur'([0-9]{2})/([0-9]{16})',
             msg)
 
         for _ in links:
-            link = MELANGE_LINK.format(YEAR=_[1], TASKID=_[2])
-            YEAR = "20" + str(_[1])
+            link = MELANGE_LINK.format(YEAR=_[0], TASKID=_[1])
+            YEAR = "20" + str(_[0])
 
-            if YEAR not in YEARS or len(_[2]) != YEARS[YEAR]:
+            if YEAR not in YEARS or len(_[1]) != YEARS[YEAR]:
                 return
 
             r = requests.get(link)
             s = BeautifulSoup(r.text)
             A = {}
-            try:
-                A['title'] = s.find('div', class_='flash-error').p.string
-                if 'is inactive' in A['title']:
-                    self.describe(channel, "cant access to that task.")
-                    return
-            except:
-                A['title'] = s.find('span', class_='title').string
+            if r.status_code != 200 or 'is inactive' in s.find('div', class_='flash-error').p.string:
+                self.describe(channel, "Can't access that task.")
+                return
+            A['title'] = s.find('span', class_='title').string
             A['status'] = s.find('span', class_='status').span.string
             A['mentor'] = s.find('span', class_='mentor').span.string
             A['org'] = s.find('span', class_='project').string
@@ -217,7 +214,9 @@ class GCIBot(irc.IRCClient):
             if ran and isForMe:
                 # Open the JSON file and choose random task.
                 if int(ran[0][0]) > 3 or int(ran[0][0] < 1):
-                    self.describe(channel, 'only support a max of 3 (and a min of 1..) random tasks per request.')
+                    self.describe(
+                        channel,
+                        'only support a max of 3 (and a min of 1..) random tasks per request.')
                     return
                 page_json_f = open("orgs/%s.json" % ran[0][1], "r")
                 tasks = json.loads(page_json_f.read())['data']['']
@@ -229,22 +228,28 @@ class GCIBot(irc.IRCClient):
                 self.describe(channel, "Spam incoming...")
                 self.msg(channel, msg)
                 for task in random_tasks:
-                    link = unicode("https://www.google-melange.com" + \
+                    link = unicode(
+                        "https://www.google-melange.com" +
                         task['operations']['row']['link']).encode('utf-8')
                     self.msg(channel, link)
 
                 for task in random_tasks:
-                    link = unicode("https://www.google-melange.com" + \
+                    link = unicode(
+                        "https://www.google-melange.com" +
                         task['operations']['row']['link']).encode('utf-8')
-
-                    self.parseLink(link, channel, user)
-
+                    try:
+                        self.parseLink(link, channel, user)
+                    except:
+                        pass
                 return
 
             if (channel or user) in IGNORED:
                 return
 
-            self.parseLink(msg, channel, user)
+            try:
+                self.parseLink(link, channel, user)
+            except:
+                pass
         except Exception as e:
             self.describe(
                 channel,
